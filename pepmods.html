@@ -1,0 +1,249 @@
+
+<!DOCTYPE html>
+<html>
+ 
+<head>
+    <title>
+        PepMods
+    </title>
+
+
+	<link rel="stylesheet" href="https://unpkg.com/chota@latest">
+
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+</head>
+ 
+<body id="top">
+	<div class="container">
+
+	<h1>PepMods: Parse peptides with modified amino acids</h1>
+
+	<div class="row">
+	 
+		<div class="card">
+			<header>
+				<h2>Instructions:</h2>
+			</header>
+			<ol>
+				<li>Paste peptides from an Excel spreadsheet directly into the input box.</br>
+				<li>Select the MHC restriction of the peptides.</br>
+
+			</ol>
+			Then...
+			<ol>
+
+				<li>Press "Process" to remove N/C-terminal flanking aa, mark modified aa, and identify Epitope Object Type (if restriction selected).</br>
+				<li>Press "Copy" to place data on the clipboard.</br>
+				<li>Press "CLEAR" to clear the output fields.</br>
+			</ol>
+			Notes
+			<ul>			
+				<li>Automatic parsing for modified peptides with mass shifts enclosed by "( )", "{ }" or "[ ]".</br>
+				<li>Automatic trimming of flanking amino acids marked out by ".", "-", "_", or lower case letters.</br>
+				<li>Do not use this parser for peptides not satisfying the above conditions.</br>
+				<li>Peptide residue numbering starts at 1.</br>
+			</ul>
+		</div>
+	</div>
+
+	<div class="row">
+		<fieldset id="inputFields">
+			<legend>Inputs</legend>
+			<label>Peptides</label>
+			<textarea placeholder="Input Peptides" id="inputId" rows=8 cols=90></textarea>
+			<label>MHC Restriction</label>
+			<li>
+                  <label for="radio1"><input id="radio1" name="radio" type="radio" class="radio" checked="checked">
+                    Class I</label>
+            </br>
+			<li>
+                  <label for="radio2"><input id="radio2" name="radio" type="radio" class="radio" checked="checked">
+                    Class II</label>
+            </br>
+            			<li>
+                  <label for="radio3"><input id="radio3" name="radio" type="radio" class="radio" checked="checked">
+                    None/Unknown</label>
+            </br>
+            
+			<button class="button default" onclick="processInput()">Process</button>
+		</fieldset>
+	</div>
+	<div class="row">
+		<fieldset id="resultFields">
+			<legend>Results</legend>
+
+			<p class="grouped">
+				<textarea placeholder="Processed Peptides" id="results1" rows=3 cols=90></textarea>
+				<button class="button outline" onclick="copyToClipboard('results1')">Copy</button></br>
+			</p>		
+			<p class="grouped">
+				<textarea placeholder="Final Peptides" id="results2" rows=3 cols=90></textarea>
+				<button class="button outline" onclick="copyToClipboard('results2')">Copy</button></br>
+			</p>	
+			<p class="grouped">
+				<textarea placeholder="Modified Residues" id="results3" rows=3 cols=90></textarea>
+				<button class="button outline" onclick="copyToClipboard('results3')">Copy</button></br>
+			</p>	
+			<p class="grouped">
+				<textarea placeholder="Epitope Object Type" id="results4" rows=3 cols=90></textarea>
+				<button class="button outline" onclick="copyToClipboard('results4')">Copy</button></br>
+			</p>
+			<button class="button outline dark" onclick="clearFields()">CLEAR</button></br>
+		</fieldset>
+
+	</div>
+    <script> 	
+    
+	let modsAA = "";
+	let startVal = "";
+	let stopVal = "";
+
+	// results, also used for errors
+	let results1 = document.getElementById("results1");
+	// other results
+	let results2 =  document.getElementById("results2");
+	let results3 =  document.getElementById("results3");
+	let results4 =	document.getElementById("results4");
+	
+		function processInput(){
+			//clear all output fields
+	     	clearFields();
+		    // Select the input element and get its value 
+        	let input = document.getElementById("inputId");
+        	let inputString = input.value;
+        	// remove spaces
+            inputString = inputString.split(" ").join("");
+            // transform newlines to commas
+        	inputString = inputString.replace(/\r?\n|\r/g, ",");
+
+        	// make an array from inputString
+        	pepArray = inputString.split(/\,/g);
+        	// process the array with processPeptide()
+        	for (var i=0; i<(pepArray.length); i++){
+        		let p = pepArray[i];
+        		let r = processPeptide(p);
+        		
+        		results1.value += r.peptides + "\r";
+        		results2.value += r.finalPeptides + "\r";
+        		results3.value += r.residues + "\r";
+        		results4.value += r.epiType + "\r";	
+        		
+			}
+		}
+	
+	    function processPeptide(inputString) {      
+
+	    	// declare local (placeholder) variables
+	    	let stringFront = "";
+			let stringEnd = "";
+			let trimFront = 0;
+			let trimEnd = 0;
+			let modArray = [];
+			let modAAs = "";
+			let epitopeType = "";
+
+			// trim off flanking characters:
+			// use regex to replace (...) [...] or {...} with single caret: ^
+			// note: the [^\)]* expression means "any run of characters which is NOT a )"
+			inputString = inputString.replace(/\([^\)]*\)/g, "^");
+			// use regex to replace [...] with single caret: ^
+			inputString = inputString.replace(/\[[^\]]*\]/g, "^");
+			// use regex to replace {...} with single caret: ^
+			inputString = inputString.replace(/\{[^\}]*\}/g, "^");
+			// find and trim flanking characters denoted by "."
+            // cut the string into two halves
+            stringFront = inputString.slice(0, inputString.length/2);
+            stringEnd = inputString.slice(inputString.length/2, inputString.length);
+            // trim off flanking characters:
+            // trim off extra characters at the start, demarcated by "."
+            // note: in /.*?\./ . means any character, * means any number of those, and ?\./ means "until the first period"
+            stringFront = stringFront.replace(/.*?\./g, "");
+            // trim off extra characters at the start, demarcated by "-"
+            stringFront = stringFront.replace(/.*?\-/g, "");
+            // trim off extra characters at the start, demarcated by "_"
+            stringFront = stringFront.replace(/.*?\_/g, "");
+            // trim off extra characters at the end, demarcated by "."
+            stringEnd = stringEnd.replace(/\.[^\.]*/g, "");
+            // trim off extra characters at the end, demarcated by "-"
+            stringEnd = stringEnd.replace(/\-[^\-]*/g, "");           
+            // trim off extra characters at the end, demarcated by "_"
+            stringEnd = stringEnd.replace(/\_[^\_]*/g, "");  
+            // recombine the string
+            inputString = stringFront.concat("", stringEnd);
+            // for cases where flanking characters are denoted by lowercase only, snip off lowercase characters
+        	inputString = inputString.replace(/[a-z]/g, "");
+        	
+        	// find the locations of modifications (i.e. carets) and their location in the peptide: 
+            let originalPeptide = inputString;
+			// extract modified amino acids by iterating through inputString
+			for (var i=0; i<(inputString.length); i++){
+				// find the index of the first caret in the string and add it to an array
+				if (inputString.search(/\^/)!=-1){
+					modArray.push(inputString.indexOf("^"));
+				}
+				// remove the caret
+				inputString = inputString.replace(/\^/, "");
+			}
+			// concatenate all caret locations with the prior character in inputString
+			if (modArray!=[]) {
+				for (var i=0; i<(modArray.length); i++){
+					modAAs += inputString.charAt(modArray[i]-1) + modArray[i] + (i < (modArray.length - 1) ? ", " : "");
+				}
+			}
+			// determine whether peptides are Exact Epitope or Epitope Containing Region based on MHC restriction
+			if (radio1.checked==true){
+					if ((inputString.length>8) && (inputString.length<12)){
+						epitopeType = "Exact Epitope";
+					} else if (inputString.length>11){
+						epitopeType = "Epitope containing region/antigenic site";
+					} else if (inputString.length<9){
+						epitopeType = "Partial Epitope"
+					}
+			} else if (radio2.checked==true){
+					if ((inputString.length>11) && (inputString.length<16)){
+						epitopeType = "Exact Epitope";
+					} else if (inputString.length>15){
+						epitopeType = "Epitope containing region/antigenic site";
+					} else if (inputString.length<12) {
+						epitopeType = "Partial Epitope";
+					}
+			} else {
+				epitopeType = "";
+			}
+			
+			// the results of the above operations
+			let result = {
+				"peptides" 		: originalPeptide,
+				"finalPeptides"	: inputString.replaceAll("^", ""),
+				"residues" 		: modAAs,
+				"epiType" 		: epitopeType
+			}
+			return result
+			
+			
+        }
+ 
+		   
+		function clearFields() { 
+			results1.value = "";  
+		  	results2.value = "";
+		  	results3.value = "";
+		  	results4.value = "";
+		  
+		}
+		
+		function copyToClipboard(id) {
+			var r = document.getElementById(id);
+			if (r) {
+				navigator.clipboard.writeText(r.value);
+			}
+		}
+		
+    </script>
+   
+
+</body>
+ 
+</html>
+
